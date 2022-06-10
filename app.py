@@ -11,6 +11,10 @@ def the_date_parser(date_time):
     return datetime.strptime(date_time, '%d/%m/%Y %H:%M')
 
 
+def meteorologica_date_parser(date_time):
+    return datetime.strptime(date_time, '%d/%m/%Y %H:%M:%S')
+
+
 def load_fallecidos() -> pd.DataFrame:
     df = pd.read_csv('fallecidos_covid.csv', delimiter=';', parse_dates=['FECHA_FALLECIMIENTO'], usecols=['FECHA_FALLECIMIENTO', 'UBIGEO'], index_col='FECHA_FALLECIMIENTO', low_memory=False)
     df = df[df['UBIGEO'] == '150132'] # Solo SJL
@@ -37,9 +41,13 @@ def load_pm25():
 
 
 def load_meteorologico(column):
-    df = pd.read_csv('meteorologico.csv', delimiter=';', parse_dates=['FECHA'], date_parser=the_date_parser, index_col='FECHA')
+    df = pd.read_csv('meteorologica.csv', delimiter=';', usecols=['FECHA', 'HORA', column])
+    df['FECHA'] = df['FECHA'] + ' ' + df['HORA']
+    df = df.drop(columns=['HORA'])
+    df['FECHA'] = pd.to_datetime(df['FECHA'], format='%d/%m/%Y %H:%M:%S')
     df = df.replace('S/D', np.nan)
     df[column] = df[column].astype(float)
+    df = df.set_index('FECHA')
     return df
 
 
@@ -148,7 +156,35 @@ def main():
         correlacion(f_pm_2020['FALLECIDOS'], f_pm_2020['PM25'], 'PM2.5 (ug/m3)', 'Fallecidos')
     
     # Analisis de temperatura
+    temperatura_df = load_meteorologico('TEMPERATURA_MEDIA')
+    temperatura_df = temperatura_df.resample('D').mean()
+    temperatura_df = temperatura_df[temperatura_df.index.year == 2020]
 
+    fallecidos_temperatura = pd.merge(fallecidos_serie, temperatura_df, left_index=True, right_index=True).dropna()
+
+    fallecidos_temperatura.plot()
+    plt.xlabel('Fecha')
+    plt.ylabel('Fallecidos y Temperatura Media (°C)')
+    plt.grid()
+    plt.legend()
+    plt.show()
+    correlacion(fallecidos_temperatura['FALLECIDOS'], fallecidos_temperatura['TEMPERATURA_MEDIA'], 'Temperatura (°C)', 'Fallecidos')
+
+    # Analisis de humedad
+    humedad_df = load_meteorologico('HUMEDAD_RELATIVA')
+    humedad_df = humedad_df.resample('D').mean()
+    humedad_df = humedad_df[humedad_df.index.year == 2020]
+
+    fallecidos_humedad = pd.merge(fallecidos_serie, humedad_df, left_index=True, right_index=True).dropna()
+
+    fallecidos_humedad.plot()
+    plt.xlabel('Fecha')
+    plt.ylabel('Fallecidos y Humedad Relativa (%)')
+    plt.grid()
+    plt.legend()
+    plt.show()
+
+    correlacion(fallecidos_humedad['FALLECIDOS'], fallecidos_humedad['HUMEDAD_RELATIVA'], 'Humedad (%)', 'Fallecidos')
 
 
 
