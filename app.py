@@ -1,4 +1,3 @@
-from cProfile import label
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,6 +5,16 @@ import pandas as pd
 
 dpns = lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M')
 dp = lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M:%S')
+
+mt_format = {
+        'PM25': 'PM 2.5 μg/m³',
+        'TEMPERATURA_MEDIA': 'Temperatura Media (°C)',
+        'HUMEDAD_RELATIVA': 'Humedad Relativa (%)',
+        'PRECIPITACION': 'Precipitacion (mm)',
+        'VELOCIDAD_VIENTO': 'Velocidad del Viento (m/s)',
+        'DIRECCION_VIENTO': 'Direccion del Viento (°)',
+        'RADIACION_SOLAR_TOTAL': 'Radiacion Solar Total (Wh/m²)'
+    }
 
 def load_fallecidos() -> pd.DataFrame:
     df = pd.read_csv(
@@ -70,7 +79,7 @@ def plot_df(df, variable_covid='', variable_meteorologica=''):
     ax2 = df[df.columns[1]].plot(y=df.columns[1], ax=ax1, secondary_y=True)
     ax1.set_xlabel('Fecha')
     ax1.set_ylabel(variable_covid)
-    ax2.set_ylabel(variable_meteorologica)
+    ax2.set_ylabel(mt_format[variable_meteorologica])
     plt.grid()
     plt.show()
 
@@ -104,14 +113,6 @@ def smooth_plot(df, column_name, xlabel='', ylabel=''):
 
 
 def analisis_covid_meteorologico(covid_serie, variable_meteorologica, variable_covid, xlabel='', ylabel=''):
-    mt_format = {
-        'TEMPERATURA_MEDIA': 'Temperatura Media (°C)',
-        'HUMEDAD_RELATIVA': 'Humedad Relativa (%)',
-        'PRECIPITACION': 'Precipitacion (mm)',
-        'VELOCIDAD_VIENTO': 'Velocidad del Viento (m/s)',
-        'DIRECCION_VIENTO': 'Direccion del Viento (°)',
-        'RADIACION_SOLAR_TOTAL': 'Radiacion Solar Total (Wh/m2)'
-    }
     mt_df = load_meteorologico(variable_meteorologica)
     mt_df = mt_df.resample('D').mean()
     mt_df = mt_df[mt_df.index.year == 2020]
@@ -119,15 +120,14 @@ def analisis_covid_meteorologico(covid_serie, variable_meteorologica, variable_c
     covid_mt_df = pd.merge(covid_serie, mt_df, left_index=True, right_index=True)
 
     y1label = 'Numero de ' + variable_covid.capitalize()
-    plot_df(covid_mt_df, y1label, mt_format[variable_meteorologica])
+    plot_df(covid_mt_df, y1label, variable_meteorologica)
 
     np_correlacion(covid_mt_df.dropna(), variable_meteorologica, variable_covid, xlabel, ylabel)
 
 
-def np_correlacion_7_dias(covid_serie, meteorologico_df, column_x, column_y, xlabel='', ylabel=''):
-    DIAS = 7
+def np_correlacion_dias(covid_serie, meteorologico_df, column_x, column_y, dias=7, xlabel='', ylabel=''):
     HORAS = 24
-    for i in range(DIAS):
+    for i in range(dias):
         meteorologico_df = meteorologico_df.shift(-HORAS)
         meteorologico_mean = meteorologico_df[meteorologico_df.index.year == 2020].resample('D').mean()
         covid_meteorologico_df = pd.merge(covid_serie, meteorologico_mean, left_index=True, right_index=True)
@@ -177,10 +177,10 @@ def main():
     np_correlacion(positivos_pm25, 'PM25', 'POSITIVOS', xlabel='PM2.5 (ug/m3)', ylabel='Positivos')
 
     # Analisis Correlacion 7 Dias Fallecidos vs PM2.5
-    np_correlacion_7_dias(fallecidos_serie, pm25_df, 'PM25', 'FALLECIDOS', xlabel='PM2.5 (ug/m3)', ylabel='Fallecidos')
+    np_correlacion_dias(fallecidos_serie, pm25_df, 'PM25', 'FALLECIDOS', dias=21, xlabel='PM2.5 (ug/m3)', ylabel='Fallecidos')
 
     # Analisis Correlacion 7 Dias Positivos vs PM2.5
-    np_correlacion_7_dias(positivos_serie, pm25_df, 'PM25', 'POSITIVOS', xlabel='PM2.5 (ug/m3)', ylabel='Positivos')
+    np_correlacion_dias(positivos_serie, pm25_df, 'PM25', 'POSITIVOS', dias=21, xlabel='PM2.5 (ug/m3)', ylabel='Positivos')
     
     # Analisis de temperatura
     analisis_covid_meteorologico(fallecidos_serie, 'TEMPERATURA_MEDIA', 'FALLECIDOS', xlabel='Temperatura (°C)', ylabel='Fallecidos')
@@ -191,9 +191,8 @@ def main():
     analisis_covid_meteorologico(positivos_serie, 'HUMEDAD_RELATIVA', 'POSITIVOS', xlabel='Humedad (%)', ylabel='Positivos')
 
     humedad_relativa_df = load_meteorologico('HUMEDAD_RELATIVA')
-    np_correlacion_7_dias(fallecidos_serie, humedad_relativa_df, 'HUMEDAD_RELATIVA', 'FALLECIDOS', xlabel='Humedad (%)', ylabel='Fallecidos')
+    np_correlacion_dias(fallecidos_serie, humedad_relativa_df, 'HUMEDAD_RELATIVA', 'FALLECIDOS', xlabel='Humedad (%)', ylabel='Fallecidos')
 
 
 if __name__ == '__main__':
     main()
-    #test()
