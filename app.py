@@ -7,7 +7,7 @@ dpns = lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M')
 dp = lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M:%S')
 
 mt_format = {
-        'PM25': 'PM 2.5 μg/m³',
+        'PM25': 'PM 2.5 μg/cm³',
         'TEMPERATURA_MEDIA': 'Temperatura Media (°C)',
         'HUMEDAD_RELATIVA': 'Humedad Relativa (%)',
         'PRECIPITACION': 'Precipitacion (mm)',
@@ -85,7 +85,7 @@ def plot_df(df, variable_covid='', variable_meteorologica=''):
 
 
 def np_correlacion(df, column_x, column_y, xlabel='', ylabel='', title=''):
-    x = df[column_x].to_numpy()
+    x = df[column_x].rolling(7, min_periods=1).mean().to_numpy()
     y = df[column_y].to_numpy()
 
     r = df[column_x].corr(df[column_y])
@@ -105,7 +105,9 @@ def np_correlacion(df, column_x, column_y, xlabel='', ylabel='', title=''):
 
 
 def smooth_plot(df, column_name, xlabel='', ylabel=''):
-    df[column_name].rolling(7).mean().plot()
+    new_df = df[column_name].rolling(7, min_periods=1).mean()
+    print(new_df)
+    new_df.plot()
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.grid()
@@ -135,7 +137,6 @@ def np_correlacion_dias(covid_serie, meteorologico_df, column_x, column_y, dias=
 
 
 def main():
-
 
     # Analisis de fallecidos
     fallecidos_df = load_fallecidos()
