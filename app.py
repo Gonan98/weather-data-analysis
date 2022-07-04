@@ -7,18 +7,30 @@ dpns = lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M')
 dp = lambda x: datetime.strptime(x, '%d/%m/%Y %H:%M:%S')
 
 variable_dict = {
-    'FALLECIDOS': 'Numero de Fallecidos',
-    'POSITIVOS': 'Numero de Casos Positivos',
-    'PM25': 'PM 2.5 μg/m³',
-    'TEMPERATURA_MEDIA': 'Temperatura Media (°C)',
-    'HUMEDAD_RELATIVA': 'Humedad Relativa (%)',
-    'PRECIPITACION': 'Precipitacion (mm)',
-    'VELOCIDAD_VIENTO': 'Velocidad del Viento (m/s)',
-    'DIRECCION_VIENTO': 'Direccion del Viento (°)',
-    'RADIACION_SOLAR_TOTAL': 'Radiacion Solar Total (Wh/m²)'
-}
+        'FALLECIDOS': 'Fallecidos',
+        'POSITIVOS': 'Casos Positivos',
+        'PM25': 'PM 2.5 μg/m³',
+        'TEMPERATURA_MEDIA': 'Temperatura Media (°C)',
+        'HUMEDAD_RELATIVA': 'Humedad Relativa (%)',
+        'PRECIPITACION': 'Precipitacion (mm)',
+        'VELOCIDAD_VIENTO': 'Velocidad del Viento (m/s)',
+        'DIRECCION_VIENTO': 'Direccion del Viento (°)',
+        'RADIACION_SOLAR_TOTAL': 'Radiacion Solar Total (Wh/m²)'
+    }
 
-def load_fallecidos() -> pd.DataFrame:
+legend_dict = {
+        'FALLECIDOS': 'Fallecidos',
+        'POSITIVOS': 'Positivos',
+        'PM25': 'PM 2.5',
+        'TEMPERATURA_MEDIA': 'Temperatura Media',
+        'HUMEDAD_RELATIVA': 'Humedad Relativa',
+        'PRECIPITACION': 'Precipitacion',
+        'VELOCIDAD_VIENTO': 'Velocidad del Viento',
+        'DIRECCION_VIENTO': 'Direccion del Viento',
+        'RADIACION_SOLAR_TOTAL': 'Radiacion Solar Total'
+    }
+
+def load_fallecidos():
     df = pd.read_csv(
         'fallecidos_covid.csv',
         delimiter=';',
@@ -28,13 +40,13 @@ def load_fallecidos() -> pd.DataFrame:
         low_memory=False)
 
     df = df[df['UBIGEO'] == '150132'] # Solo SJL
-    df = df.groupby(df.index).count()
-    df = df.rename(columns={'UBIGEO': 'FALLECIDOS'})
-    df = df.reindex(pd.date_range(start='2020-01-01', end='2022-04-30')).fillna(0)
-    return df
+    serie = df.index.value_counts().sort_index()
+    serie = serie.rename('FALLECIDOS')
+    serie = serie.reindex(pd.date_range(start='2020-01-01', end='2022-05-31')).fillna(0)
+    return serie
 
 
-def load_positivos() -> pd.DataFrame:
+def load_positivos():
     df = pd.read_csv(
         'positivos_covid.csv',
         delimiter=';',
@@ -43,10 +55,10 @@ def load_positivos() -> pd.DataFrame:
         index_col='FECHA_RESULTADO')
 
     df = df[df['UBIGEO'] == 150132] # Solo SJL
-    df = df.groupby(df.index).count()
-    df = df.rename(columns={'UBIGEO': 'POSITIVOS'})
-    df = df.reindex(pd.date_range(start='2020-01-01', end='2022-04-30')).fillna(0)
-    return df
+    serie = df.index.value_counts().sort_index()
+    serie = serie.rename('POSITIVOS')
+    serie = serie.reindex(pd.date_range(start='2020-01-01', end='2022-05-31')).fillna(0)
+    return serie
 
 
 def load_pm25():
@@ -77,25 +89,26 @@ def load_meteorologico(column):
 
 
 def plot_df(df):
-    variable_y1 = df.columns[0]
-    variable_y2 = df.columns[1]
-    ax1 = df[variable_y1].plot(y=variable_dict[variable_y1])
-    ax2 = df[variable_y2].plot(y=variable_dict[variable_y2], ax=ax1, secondary_y=True)
+    var_y1 = df.columns[0]
+    var_y2 = df.columns[1]
+    
+    ax1 = df[var_y1].plot(y=variable_dict[var_y1])
+    ax2 = df[var_y2].plot(y=variable_dict[var_y2], ax=ax1, secondary_y=True)
     ax1.set_xlabel('Fecha')
-    ax1.set_ylabel(variable_dict[variable_y1])
-    ax2.set_ylabel(variable_dict[variable_y2])
+    ax1.set_ylabel(variable_dict[var_y1])
+    ax2.set_ylabel(variable_dict[var_y2])
     plt.grid()
     plt.show()
 
 
 def np_correlacion(df, title=''):
 
-    variable_x = df.columns[1] # Variable Meteorologica
-    variable_y = df.columns[0] # Variable Covid
+    var_x = df.columns[1] # Variable Meteorologica
+    var_y = df.columns[0] # Variable Covid
 
-    x = df[variable_x].to_numpy()
-    y = df[variable_y].to_numpy()
-    r = df[variable_x].corr(df[variable_y])
+    x = df[var_x].to_numpy()
+    y = df[var_y].to_numpy()
+    r = df[var_x].corr(df[var_y])
 
     plt.plot(x, y, 'o', label='Datos')
 
@@ -104,19 +117,17 @@ def np_correlacion(df, title=''):
 
     plt.plot(x, p(x), '-', label='Regresion', color='red')
     plt.title(f'{title}\nR² = {round(r**2, 7)}')
-    plt.xlabel(variable_dict[variable_x])
-    plt.ylabel(variable_dict[variable_y])
+    plt.xlabel(variable_dict[var_x])
+    plt.ylabel(variable_dict[var_y])
     plt.grid()
     plt.legend()
     plt.show()
 
 
-def smooth_plot(df):
-    variable_covid = df.columns[0]
-    new_df = df[variable_covid].rolling(7, min_periods=1).mean()
-    new_df.plot()
+def smooth_plot(serie):
+    serie.rolling(7, min_periods=1).mean().plot()
     plt.xlabel('Fecha')
-    plt.ylabel(variable_dict[variable_covid])
+    plt.ylabel(variable_dict[serie.name])
     plt.grid()
     plt.show()
 
@@ -131,17 +142,16 @@ def analisis_covid_meteorologico(covid_serie, variable_meteorologica):
     np_correlacion(covid_mt_df.dropna())
 
 
-def np_correlacion_dias(covid_serie, meteorologico_df, dias=60):
-    HORAS = 24
+def np_correlacion_dias(covid_serie, meteorologico_df, dias=7):
     mt_df = meteorologico_df.copy()
     for i in range(dias):
-        mt_df = mt_df.shift(HORAS)
-        mt_mean_df = mt_df[(mt_df.index >= '2020-04-01') & (mt_df.index <= '2020-12-31')].resample('D').mean()
-        covid_meteorologico_df = pd.merge(covid_serie, mt_mean_df, left_index=True, right_index=True).dropna()
+        mt_df = mt_df.shift(1)
+        # mt_mean_df = mt_df[(mt_df.index >= '2020-04-01') & (mt_df.index <= '2020-12-31')].resample('D').mean()
+        covid_meteorologico_df = pd.merge(covid_serie, mt_df, left_index=True, right_index=True).dropna()
         np_correlacion(covid_meteorologico_df, title=f'Correlacion corriendo {i+1} dia(s) atrás')
 
 
-def np_correlacion_promedio_dias(covid_serie, meteorologico_df, dias=60):
+def np_correlacion_promedio_dias(covid_serie, meteorologico_df, dias=7):
     HORAS = 24
     mt_df = meteorologico_df.copy()
     for i in range(dias):
@@ -151,6 +161,11 @@ def np_correlacion_promedio_dias(covid_serie, meteorologico_df, dias=60):
         covid_meteorologico_df = pd.merge(covid_serie, mt_mean_df, left_index=True, right_index=True).dropna()
         np_correlacion(covid_meteorologico_df, title=f'Correlacion corriendo {i+1} dia(s) atrás promediado')
 
+
+def test():
+    fallecidos_serie = load_fallecidos()
+    positivos_serie = load_positivos()
+    print(fallecidos_serie)
 
 
 def main():
@@ -185,32 +200,28 @@ def main():
     
     fallecidos_pm25 = pd.merge(fallecidos_serie, pm25_mean_2020, left_index=True, right_index=True)
     positivos_pm25 = pd.merge(positivos_serie, pm25_mean_2020, left_index=True, right_index=True)
-
-    plot_df(fallecidos_pm25)
-    plot_df(positivos_pm25)
     
-    # Drop 0 values
-    fallecidos_pm25 = fallecidos_pm25[fallecidos_pm25['FALLECIDOS'] > 0].dropna()
-    positivos_pm25 = positivos_pm25[positivos_pm25['POSITIVOS'] > 0].dropna()
+    # plot_df(fallecidos_pm25)
+    # plot_df(positivos_pm25)
 
-    np_correlacion(fallecidos_pm25)
-    np_correlacion(positivos_pm25)
+    np_correlacion(fallecidos_pm25.dropna())
+    np_correlacion(positivos_pm25.dropna())
 
-    # Analisis Correlacion 7 Dias Fallecidos vs PM2.5
-    np_correlacion_dias(fallecidos_serie, pm25_df)
-    np_correlacion_promedio_dias(fallecidos_serie, pm25_df)
+    # Analisis Correlacion 30 Dias Fallecidos vs PM2.5
+    np_correlacion_dias(fallecidos_serie, pm25_mean_2020, dias=60)
+    # np_correlacion_promedio_dias(fallecidos_serie, pm25_df)
 
-    # Analisis Correlacion 7 Dias Positivos vs PM2.5
-    np_correlacion_dias(positivos_serie, pm25_df)
-    np_correlacion_promedio_dias(positivos_serie, pm25_df)
+    # Analisis Correlacion 30 Dias Positivos vs PM2.5
+    np_correlacion_dias(positivos_serie, pm25_mean_2020, dias=60)
+    # np_correlacion_promedio_dias(positivos_serie, pm25_df)
 
     # Analisis de temperatura
     analisis_covid_meteorologico(fallecidos_serie, 'TEMPERATURA_MEDIA')
     analisis_covid_meteorologico(positivos_serie, 'TEMPERATURA_MEDIA')
 
     # Analisis de humedad
-    analisis_covid_meteorologico(fallecidos_serie, 'HUMEDAD_RELATIVA')
-    analisis_covid_meteorologico(positivos_serie, 'HUMEDAD_RELATIVA')
+    # analisis_covid_meteorologico(fallecidos_serie, 'HUMEDAD_RELATIVA')
+    # analisis_covid_meteorologico(positivos_serie, 'HUMEDAD_RELATIVA')
 
     # humedad_relativa_df = load_meteorologico('HUMEDAD_RELATIVA')
     # np_correlacion_dias(fallecidos_serie, humedad_relativa_df)
@@ -218,3 +229,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    #test()
