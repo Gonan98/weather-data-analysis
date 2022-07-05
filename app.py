@@ -12,7 +12,12 @@ FIN_PRIMERA_OLA = '2021-01-01'
 INICIO_SEGUNDA_OLA = FIN_PRIMERA_OLA
 FIN_SEGUNDA_OLA = '2021-07-01'
 
-variable_dict = {
+PM25 = 'PM25'
+TEMPERATURA_MEDIA = 'TEMPERATURA_MEDIA'
+
+DIAS_ATRAS = 7
+
+var_dict = {
         'FALLECIDOS': 'Fallecidos',
         'POSITIVOS': 'Casos Positivos',
         'PM25': 'PM 2.5 μg/m³',
@@ -94,16 +99,17 @@ def load_meteorologico(column):
     return df
 
 
-def plot_df(df):
+def plot_df(df, title=''):
     var_y1 = df.columns[0]
     var_y2 = df.columns[1]
-    ax1 = df[var_y1].plot(y=variable_dict[var_y1])
-    ax2 = df[var_y2].plot(y=variable_dict[var_y2], ax=ax1, secondary_y=True)
+    ax1 = df[var_y1].plot(y=var_dict[var_y1])
+    ax2 = df[var_y2].plot(y=var_dict[var_y2], ax=ax1, secondary_y=True)
     ax1.set_xlabel('Fecha')
-    ax1.set_ylabel(variable_dict[var_y1])
-    ax2.set_ylabel(variable_dict[var_y2])
+    ax1.set_ylabel(var_dict[var_y1])
+    ax2.set_ylabel(var_dict[var_y2])
     ax1.legend([legend_dict[var_y1]], loc='upper left')
     ax2.legend([legend_dict[var_y2]], loc='upper right')
+    plt.title(title)
     plt.grid()
     plt.show()
 
@@ -124,8 +130,8 @@ def np_correlacion(df, title=''):
 
     plt.plot(x, p(x), '-', label='Regresion', color='red')
     plt.title(f'{title}\nR² = {round(r**2, 7)}')
-    plt.xlabel(variable_dict[var_x])
-    plt.ylabel(variable_dict[var_y])
+    plt.xlabel(var_dict[var_x])
+    plt.ylabel(var_dict[var_y])
     plt.grid()
     plt.legend()
     plt.show()
@@ -134,56 +140,77 @@ def np_correlacion(df, title=''):
 def smooth_plot(serie):
     serie.rolling(7, min_periods=1).mean().plot()
     plt.xlabel('Fecha')
-    plt.ylabel(variable_dict[serie.name])
+    plt.ylabel(var_dict[serie.name])
     plt.grid()
     plt.show()
 
 
-def analisis_covid_meteorologico(covid_serie, variable_meteorologica, ola=1):
-    mt_df = load_meteorologico(variable_meteorologica)
-    mt_df = mt_df.resample('D').mean()
+def analizar(covid_serie, var_name, start_date, end_date, dias_desplazados):
+        
+    if (var_name == PM25):
+        df = load_pm25()
+    else:
+        df = load_meteorologico(var_name)
     
-    if (ola == 1):
-        mt_df = mt_df[(mt_df.index >= INICIO_PRIMERA_OLA) & (mt_df.index < FIN_PRIMERA_OLA)]
-    elif (ola == 2):
-        mt_df = mt_df[(mt_df.index >= INICIO_SEGUNDA_OLA) & (mt_df.index < FIN_SEGUNDA_OLA)]
+    df = df.resample('D').mean()
+    filtered_df = filter_between_dates(df, start_date, end_date)
 
-    covid_mt_df = pd.merge(covid_serie, mt_df, how='left', left_index=True, right_index=True)
+    covid_mt_df = pd.merge(covid_serie, filtered_df, how='left', left_index=True, right_index=True)
     plot_df(covid_mt_df)
     np_correlacion(covid_mt_df.dropna())
+    np_correlacion_desplazada(covid_serie, df, start_date, end_date, dias=dias_desplazados)
+    np_correlacion_desplazada(covid_serie, df, start_date, end_date, dias=dias_desplazados, avg=True)
 
 
-def np_correlacion_desplazada(covid_serie, mt_df, start_date, end_date, dias=7, avg=False):
+def np_correlacion_desplazada(covid_serie, mt_df, start_date, end_date, dias, avg=False):
     
-    HORAS = 24
-    var_df = mt_df.copy()
+    # HORAS = 24
+    OFFSET = 1
+    df = mt_df.copy()
     
     for i in range(1, dias):
         
-        var_df = var_df.shift(periods=-HORAS)
-        var_mean_df = filter_between_dates(var_df, start_date, end_date).resample('D').mean()
+        df = df.shift(periods=-OFFSET)
+        avg_df = filter_between_dates(df, start_date, end_date)
         
         if avg:
-            var_mean_df = var_mean_df.rolling(i+1, min_periods=1).mean()
+            avg_df = avg_df.rolling(i+1, min_periods=1).mean()
                         
-        covid_mt_df = pd.merge(covid_serie, var_mean_df, how='left', left_index=True, right_index=True).dropna()
+        covid_mt_df = pd.merge(covid_serie, avg_df, how='left', left_index=True, right_index=True).dropna()
         np_correlacion(covid_mt_df, title=f'Correlacion corriendo {i} día(s) atrás promediado' if avg else f'Correlacion corriendo {i} día(s) atrás')
 
 
-def analisis_pm25(pm25, start_year, end_year=None):
+def eca(pm25, start_date, end_date, title):
     ECA = 50
     
-    if end_year is None:
-        pm25df = pm25[pm25.index >= start_year].copy()
-    else:
-        pm25df = pm25[(pm25.index >= start_year) & (pm25.index >= end_year)].copy()
+    filtered_pm25 = filter_between_dates(pm25, start_date, end_date) 
         
-    pm25df.plot()
+    filtered_pm25.plot()
     plt.axhline(ECA, color='orange', label='ECA')
     plt.xlabel('Fecha')
-    plt.ylabel(variable_dict['PM25'])
+    plt.ylabel(var_dict['PM25'])
+    plt.title(title)
     plt.grid()
     plt.legend(['Promedio PM 2.5', 'ECA'])
+    plt.show()
+    
+    
+def inca(pm25, start_date, end_date, title):
+    BUENA = 50
+    MODERADA = 100
+    MALA = 500
+    
+    filtered_pm25 = filter_between_dates(pm25, start_date, end_date)
+    filtered_pm25['PM25'] = filtered_pm25['PM25'] * 100 / 25
+    filtered_pm25.plot()
+    plt.axhline(BUENA, color='green', label='Buena')
+    plt.axhline(MODERADA, color='yellow', label='Moderada')
+    plt.axhline(MALA, color='orange', label='Mala')
+    plt.xlabel('Fecha')
+    plt.ylabel(var_dict['PM25'])
+    plt.title(title)
+    plt.legend()
+    plt.grid()
     plt.show()
 
 
@@ -194,105 +221,77 @@ def filter_between_dates(df, start, end):
 def main():
 
     # Analisis de fallecidos
-    fallecidos_df = load_fallecidos()
-    smooth_plot(fallecidos_df)
+    fallecidos_serie = load_fallecidos()
+    smooth_plot(fallecidos_serie)
 
     # Analisis de positivos
-    positivos_df = load_positivos()
-    smooth_plot(positivos_df)
+    positivos_serie = load_positivos()
+    smooth_plot(positivos_serie)
 
     # Analisis de PM25
     pm25_df = load_pm25()
-    pm25_mean = pm25_df.resample('D').mean()
+    pm25_avg = pm25_df.resample('D').mean()
     pm25_min = pm25_df.resample('D').min()
     pm25_max = pm25_df.resample('D').max()
 
-    plt.plot(pm25_mean, label='Promedio')
+    plt.plot(pm25_avg, label='Promedio')
     plt.plot(pm25_min, label='Minimo')
     plt.plot(pm25_max, label='Maximo')
     plt.xlabel('Años')
-    plt.ylabel(variable_dict['PM25'])
+    plt.ylabel(var_dict['PM25'])
     plt.grid()
     plt.legend()
     plt.show()
+    
+    """
+    ANALISIS PRIMERA OLA
+    """
+    
+    fallecidos_ola_1 = filter_between_dates(fallecidos_serie, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA)
+    positivos_ola_1 = filter_between_dates(positivos_serie, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA)
+    
+    # ECA
+    eca(pm25_avg, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA, 'ECA PM 2.5 PRIMERA OLA')
+    
+    # INCA
+    inca(pm25_avg, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA, 'INCA PM 2.5 PRIMERA OLA')
+    
+    # Fallecidos vs PM 2.5
+    analizar(fallecidos_ola_1, PM25, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA, DIAS_ATRAS)
 
-    """
-    Analisis Primera Ola
-    """
-    fallecidos_ola_1 = filter_between_dates(fallecidos_df, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA)
-    positivos_ola_1 = filter_between_dates(positivos_df, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA)
-    pm25_ola_1 = filter_between_dates(pm25_mean, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA)
+    # Positivos vs PM 2.5
+    analizar(positivos_ola_1, PM25, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA, DIAS_ATRAS)
     
-    f_pm25_o1 = pd.merge(fallecidos_ola_1, pm25_ola_1, how='left', left_index=True, right_index=True)
-    p_pm25_o1 = pd.merge(positivos_ola_1, pm25_ola_1, how='left', left_index=True, right_index=True)
+    # Fallecidos vs Temperatura
+    analizar(fallecidos_ola_1, TEMPERATURA_MEDIA, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA, DIAS_ATRAS)
     
-    plot_df(f_pm25_o1)
-    plot_df(p_pm25_o1)
+    # Positivos vs Temperatura Media
+    analizar(positivos_ola_1, TEMPERATURA_MEDIA, INICIO_PRIMERA_OLA, FIN_PRIMERA_OLA, DIAS_ATRAS)
+    
+    """
+    ANALISIS SEGUNDA OLA
+    """
+    
+    fallecidos_ola_2 = filter_between_dates(fallecidos_serie, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA)
+    positivos_ola_2 = filter_between_dates(positivos_serie, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA)
+    
+    # ECA
+    eca(pm25_avg, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA, 'ECA PM 2.5 SEGUNDA OLA')
+    
+    # INCA
+    inca(pm25_avg, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA, 'INCA PM 2.5 SEGUNDA OLA')
+    
+    # Fallecidos vs PM 2.5
+    analizar(fallecidos_ola_2, PM25, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA, DIAS_ATRAS)
 
-    np_correlacion(f_pm25_o1.dropna())
-    np_correlacion(p_pm25_o1.dropna())
+    # Positivos vs PM 2.5
+    analizar(positivos_ola_2, PM25, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA, DIAS_ATRAS)
     
-    # Analisis Correlacion 30 Dias Fallecidos vs PM2.5
-    np_correlacion_desplazada(fallecidos_ola_1, pm25_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7)
-    np_correlacion_desplazada(fallecidos_ola_1, pm25_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7, avg=True)
+    # Fallecidos vs Temperatura
+    analizar(fallecidos_ola_2, TEMPERATURA_MEDIA, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA, DIAS_ATRAS)
     
-    # Analisis Correlacion 30 Dias Positivos vs PM2.5
-    np_correlacion_desplazada(positivos_ola_1, pm25_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7)
-    np_correlacion_desplazada(positivos_ola_1, pm25_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7, avg=True)
-    
-    """
-    Analisis Segunda Ola
-    """
-    fallecidos_ola_2 = filter_between_dates(fallecidos_df, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA)
-    positivos_ola_2 = filter_between_dates(positivos_df, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA)
-    pm25_ola_2 = filter_between_dates(pm25_mean, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA)
-    
-    f_pm25_o2 = pd.merge(fallecidos_ola_2, pm25_ola_2, how='left', left_index=True, right_index=True)
-    p_pm25_o2 = pd.merge(positivos_ola_2, pm25_ola_2, how='left', left_index=True, right_index=True)
-    
-    plot_df(f_pm25_o2)
-    plot_df(p_pm25_o2)
-    
-    np_correlacion(f_pm25_o2.dropna())
-    np_correlacion(p_pm25_o2.dropna())
-    
-    # Analisis Correlacion 30 Dias Fallecidos vs PM2.5
-    np_correlacion_desplazada(fallecidos_ola_2, pm25_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7)
-    np_correlacion_desplazada(fallecidos_ola_2, pm25_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7, avg=True)
-
-    # Analisis Correlacion 30 Dias Positivos vs PM2.5
-    np_correlacion_desplazada(positivos_ola_2, pm25_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7)
-    np_correlacion_desplazada(positivos_ola_2, pm25_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7, avg=True)
-    
-    # PM 2.5 ECA
-    analisis_pm25(pm25_mean, INICIO_PRIMERA_OLA)
-
-    """
-    Analisis de temperatura
-    """
-    
-    # PRIMERA OLA
-    temperatura_df = load_meteorologico('TEMPERATURA_MEDIA')
-    analisis_covid_meteorologico(fallecidos_ola_1, 'TEMPERATURA_MEDIA')
-    analisis_covid_meteorologico(positivos_ola_1, 'TEMPERATURA_MEDIA')
-    
-    np_correlacion_desplazada(fallecidos_ola_1, temperatura_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7)
-    np_correlacion_desplazada(fallecidos_ola_1, temperatura_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7, avg=True)
-    
-    np_correlacion_desplazada(positivos_ola_1, temperatura_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7)
-    np_correlacion_desplazada(positivos_ola_1, temperatura_df, start_date=INICIO_PRIMERA_OLA, end_date=FIN_PRIMERA_OLA, dias=7, avg=True)
-    
-    
-    # SEGUNDA OLA
-    analisis_covid_meteorologico(fallecidos_ola_2, 'TEMPERATURA_MEDIA', ola=2)
-    analisis_covid_meteorologico(positivos_ola_2, 'TEMPERATURA_MEDIA', ola=2)
-    
-    np_correlacion_desplazada(fallecidos_ola_2, temperatura_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7)
-    np_correlacion_desplazada(fallecidos_ola_2, temperatura_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7, avg=True)
-    
-    np_correlacion_desplazada(positivos_ola_2, temperatura_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7)
-    np_correlacion_desplazada(positivos_ola_2, temperatura_df, start_date=INICIO_SEGUNDA_OLA, end_date=FIN_SEGUNDA_OLA, dias=7, avg=True)
-    
+    # Positivos vs Temperatura Media
+    analizar(positivos_ola_2, TEMPERATURA_MEDIA, INICIO_SEGUNDA_OLA, FIN_SEGUNDA_OLA, DIAS_ATRAS) 
 
 
 if __name__ == '__main__':
